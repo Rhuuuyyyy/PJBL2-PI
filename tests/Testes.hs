@@ -249,6 +249,10 @@ testesCamada3 =
       (lerCampeonato "1;A;1;0;B\n1;C;0;0;A") (Left (TimeRepetidoNaRodada 1 "A"))
   , caso "Erro TimeRepetidoNaRodada (duas vezes como mandante)"
       (lerCampeonato "1;A;1;0;B\n1;A;0;0;C") (Left (TimeRepetidoNaRodada 1 "A"))
+  , caso "TimeRepetidoNaRodada: um erro por par rodada/time, mesmo com três aparições"
+      (todosOsErros "1;A;1;0;B\n1;A;0;0;C\n1;D;0;0;A") [TimeRepetidoNaRodada 1 "A"]
+  , caso "TimeRepetidoNaRodada: vários pares em ordem de rodada e nome"
+      (todosOsErros "2;B;1;0;C\n2;B;1;0;D\n1;A;1;0;E\n1;F;1;0;A") [TimeRepetidoNaRodada 1 "A", TimeRepetidoNaRodada 2 "B"]
   , caso "mesmo time em rodadas diferentes é válido"
       (lerCampeonato "1;A;1;0;B\n2;A;0;0;C") (Right [Partida 1 "A" 1 0 "B", Partida 2 "A" 0 0 "C"])
   -- Rigor da conversão de números
