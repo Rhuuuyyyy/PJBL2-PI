@@ -33,7 +33,7 @@
   das não acentuadas (um time "Átila" ficaria depois de "Zeta").
 - **Campeonato de teste** (`src/Dados.hs`): 6 times, 5 rodadas, 15 partidas,
   nenhum time joga duas vezes na mesma rodada; tem um 0 x 0 (rodada 1, Paraná x
-  Operário), vitórias por 4 gols (Cianorte 4 x 0 Operário), nomes com acento, e
+  Operário), uma vitória por 4 gols (Cianorte 4 x 0 Operário), nomes com acento, e
   empates em pontos na classificação final resolvidos por vitórias (Londrina e
   Operário, 6 pontos) e por saldo de gols (Cianorte, Athletico e Coritiba, 7
   pontos). O campeonato existe como texto e como lista de `Partida`; um teste
@@ -42,11 +42,23 @@
 ## 3. Camada 2 — classificação
 
 - `linhaDoTime` usa `foldl`; a cada partida, `acumula` ignora quem não jogou
-  (`maybe linha ... (golsDoTime t p)`).
+  (`maybe linha ... (golsDoTime t p)`). `foldl` porque o acumulador (a `Linha`)
+  vai sendo atualizado partida a partida, na ordem da lista, e o enunciado pede
+  `foldl` ou `foldr`. É a versão preguiçosa (não `foldl'`): para o tamanho de um
+  campeonato não há problema de memória, e `foldl'` só entra no `Prelude` a
+  partir do GHC 9.10 (um `import` explícito geraria aviso de import redundante
+  nessas versões). `foldr` é usado onde a dobra à direita é natural (soma de gols
+  em `mediaGols`, maior largura de coluna em `tabelaFormatada`).
+- `Linha` guarda `jogos` mesmo sendo derivável (vitórias + empates + derrotas):
+  o enunciado lista o campo, e tê-lo explícito evita recalcular e documenta
+  a linha da tabela. `linhaDoTime` mantém a invariante incrementando os dois.
 - `classificacao` usa um único `sortBy` com
   `comparing (Down . pontosLinha) <> comparing (Down . vitorias) <> ...`. A
   comparação por vários critérios é uma função só: `Ordering` é um `Monoid`, e
-  `<>` passa para o próximo critério apenas em caso de empate. `Down` inverte a
+  `<>` passa para o próximo critério apenas em caso de empate. O `<>` aqui atua
+  sobre *funções* de dois argumentos (`a -> a -> Ordering`): existe uma instância
+  de `Semigroup`/`Monoid` para `b -> c` sempre que `c` é `Semigroup`/`Monoid`,
+  definida ponto a ponto (`(f <> g) x = f x <> g x`). `Down` inverte a
   ordem onde "mais é melhor". Encadear vários `sortBy` não serviria: um `sortBy`
   só preserva a ordem anterior se for estável e aplicado do critério menos para o
   mais importante, o que é frágil e mais difícil de ler.
@@ -68,7 +80,10 @@
 ### Erros
 
 `Erro` tem os cinco construtores exigidos mais dois, e cada um carrega a linha
-ou a rodada do problema:
+ou a rodada do problema. Alguns carregam também o dado que permite uma mensagem
+útil (campo, lado, texto, time, quantidade de campos): o enunciado pede "no
+mínimo" esses construtores e mensagens úteis, e um `Erro` só com o número da
+linha não diria o que corrigir.
 
 | Construtor | Carrega | Quando |
 |---|---|---|
@@ -105,6 +120,10 @@ visitante. Como `lerPartida` devolve `Either Erro Partida` (um erro só), report
   só sobre as linhas válidas; um time repetido numa rodada em que uma das linhas
   é inválida por outro motivo não é reportado até que a outra seja corrigida.
   Há um erro por par (rodada, time), mesmo que o time apareça três vezes.
+  Os erros entre linhas saem ordenados por (rodada, nome do time), não pela
+  posição no texto; por isso, em `lerCampeonato`, o `TimeRepetidoNaRodada`
+  devolvido é o da menor rodada, e não necessariamente o da linha mais acima.
+  Erros de linha sempre vêm antes dos erros entre linhas.
 - Consistência: para qualquer texto, `lerCampeonato` devolve `Left e` se e somente
   se `todosOsErros` não é vazio, e nesse caso `e` é o primeiro elemento de
   `todosOsErros`.
@@ -137,7 +156,8 @@ esquerda são aceitos (`"007"` vale 7).
 ### Espaços, finais de linha e BOM
 
 `aparar` remove espaços (qualquer `isSpace`, o que inclui o `\r` do final de
-linha do Windows) e o BOM (U+FEFF) das duas pontas de cada campo. Nomes de time
+linha do Windows), o BOM (U+FEFF) e o espaço de largura zero (U+200B) das duas
+pontas de cada campo. Nomes de time
 mantêm os espaços internos. Linhas só com espaços ou só com `\r` contam como em
 branco. Finais de linha só com `\r` (Mac antigo) não são reconhecidos como quebra
 de linha: o texto inteiro seria lido como uma linha só (com erro de campos).
@@ -151,9 +171,11 @@ a largura do cabeçalho. Lista vazia produz só o cabeçalho.
 
 ### Separação entre núcleo puro e IO
 
-Toda a lógica, inclusive o texto do relatório (`demonstracao`), é pura e testada.
-`main` é a única função do programa com IO: configura a saída e imprime o
-relatório. Os dados ficam no código como `String`, como pede o enunciado
+Toda a lógica de leitura, cálculo e formatação é pura e testada. O texto do
+relatório (`demonstracao`, em `Main.hs`, como a seção 6 do enunciado pede) também
+é uma função pura, apenas não testada diretamente (um módulo `Main` não pode ser
+importado pelos testes); ela só junta funções testadas. `main` é a única função
+do programa com IO: configura a saída e imprime o relatório. Os dados ficam no código como `String`, como pede o enunciado
 (playground sem entrada pelo teclado); não há `getLine`, `getContents` nem
 `readFile`.
 
@@ -173,7 +195,7 @@ configuração.
 O enunciado lista `Data.List`, `Data.Char`, `Data.Maybe`, `Data.Either`,
 `Data.Ord` e `Text.Read`. Além deles (todos de `base`):
 
-- `Numeric (showFFloat)` em `Leitura.hs`: formata números com duas casas decimais
+- `Numeric (showFFloat)` em `Main.hs`: formata números com duas casas decimais
   sem recorrer a `Text.Printf`.
 - `System.IO` em `Main.hs` e `Testes.hs`: `hGetEncoding`, `hSetEncoding` e
   `mkTextEncoding`, pelo motivo descrito em "Codificação da saída".
@@ -184,8 +206,8 @@ Não há extensões de linguagem nem diretivas `OPTIONS_GHC`.
 
 ## 6. Testes
 
-- `testar` é o do enunciado (`IO ()`, mesmas mensagens `OK`/`FALHOU`; na falha, a
-  mensagem também mostra o valor esperado). Para contar falhas sem mudar a
+- `testar` é o do enunciado (`IO ()`, com as saídas `OK`/`FALHOU` do enunciado,
+  alinhadas com espaços; na falha, a mensagem também mostra o valor esperado). Para contar falhas sem mudar a
   assinatura, cada teste é um par `(passou, testar ...)`, criado por `caso`.
 - Cobertura: casos obrigatórios da seção 7 do enunciado; um teste por construtor
   de `Erro` (com mais de uma variante quando há); estritez de `readMaybe`
@@ -195,14 +217,13 @@ Não há extensões de linguagem nem diretivas `OPTIONS_GHC`.
   `mediaGols` em lista vazia e com empate; tabela formatada com nome longo, curto
   e lista vazia; acentos.
 - Os valores esperados das tabelas não foram copiados da saída do programa:
-  vieram de um cálculo independente em outra linguagem (Python), feito a partir
-  dos placares, e conferidos com a leitura manual das partidas.
-- Verificações adicionais feitas fora do repositório: comparação da classificação
-  com esse cálculo independente em 3.000 campeonatos aleatórios; 20.000 textos
-  adversariais (lixo, caracteres de controle, números enormes, `\r`, BOM) sem
-  nenhuma exceção; e teste de mutação (alterar de propósito critérios de
-  desempate, `ateRodada`, validações, etc.) em que cada alteração relevante faz
-  pelo menos um teste falhar.
+  foram calculados a partir dos placares por um script independente (em outra
+  linguagem) e conferidos com a leitura manual das partidas. Esse script e as
+  verificações extras feitas durante o desenvolvimento (comparação com o cálculo
+  independente em campeonatos aleatórios, textos aleatórios sem nenhuma exceção
+  e alterações deliberadas do código para conferir que algum teste falha) **não
+  fazem parte do repositório**; só os testes de `tests/Testes.hs` são
+  reproduzíveis com os comandos do README.
 
 ## 7. Armadilhas do enunciado e como foram evitadas
 
@@ -232,7 +253,23 @@ Não há extensões de linguagem nem diretivas `OPTIONS_GHC`.
 - Números acima de 1.000.000 em rodada e gols são rejeitados.
 - Percentuais e médias usam ponto decimal (`3.07`), não vírgula.
 - Finais de linha só com `\r` não são suportados (seção 4).
-- `nub` é quadrático; para os tamanhos de um campeonato isso é irrelevante.
+- Desempenho: `classificacao` percorre todas as partidas para cada time
+  (tempo proporcional a times × partidas) e `times` usa `nub`, que é quadrático.
+  Para campeonatos reais (dezenas de times, centenas de partidas) é
+  instantâneo; em testes com 5.000 times e 50.000 partidas levou cerca de 100
+  segundos. Uma versão em O(n log n) (agrupando eventos por time) foi
+  considerada e descartada para manter o código simples e fiel ao enunciado.
+- Em consoles Windows cuja página de código só admite codificação multibyte
+  (por exemplo 54936 ou 50220), o GHC lança exceção ao imprimir qualquer texto
+  não ASCII; o `main` não trata esse caso (qualquer `putStrLn "café"` falharia
+  igualmente). Nas páginas comuns (437, 850, 1252, 65001) a saída funciona.
+- Nomes de time são comparados caractere a caractere: "Paraná" escrito com `á`
+  composto ou com `a` + acento combinante conta como dois times; caracteres
+  invisíveis no meio do nome (além do U+200B nas pontas) não são tratados.
+- Gols ou rodada negativos com módulo acima do limite (por exemplo
+  `-99999999999999999999`) resultam em `NumeroInvalido`, não em
+  `PlacarNegativo`; a mensagem de `NumeroInvalido` repete o texto do campo
+  inteiro, por maior que seja.
 - `Partida` pode ser construída sem validação por quem usa o construtor
   diretamente (seção 2).
 - Testado apenas com GHC 9.6.7 e 9.14.1, no Windows 11.

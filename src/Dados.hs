@@ -8,7 +8,7 @@ module Dados
 import Tipos
 
 -- | Campeonato de teste em formato de texto (como chegaria à Camada 3).
--- Contém um 0 x 0 (rodada 1), goleadas de 4 x 0 (rodada 2) e empates em
+-- Contém um 0 x 0 (rodada 1), uma goleada de 4 x 0 (rodada 2) e empates em
 -- pontos na classificação final.
 dadosCampeonato :: String
 dadosCampeonato = unlines

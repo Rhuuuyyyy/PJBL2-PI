@@ -9,14 +9,12 @@ module Leitura
   , lerCampeonato
   , todosOsErros
   , tabelaFormatada
-  , demonstracao
   ) where
 
 import Data.Char (isDigit, isSpace)
 import Data.Either (partitionEithers)
 import Data.List (dropWhileEnd, group, intercalate, isPrefixOf, sort, unfoldr)
 import Data.Maybe (listToMaybe)
-import Numeric (showFFloat)
 import Text.Read (readMaybe)
 
 import Classificacao
@@ -88,12 +86,12 @@ separar sep = unfoldr passo . Just
       (campo, [])        -> (campo, Nothing)
       (campo, _ : resto) -> (campo, Just resto)
 
--- | Remove espaços (inclusive '\r' de finais de linha do Windows) e BOM
--- das duas pontas.
+-- | Remove espaços (inclusive '\r' de finais de linha do Windows), BOM
+-- (U+FEFF) e espaço de largura zero (U+200B) das duas pontas.
 aparar :: String -> String
 aparar = dropWhileEnd ehEspaco . dropWhile ehEspaco
   where
-    ehEspaco c = isSpace c || c == '\65279'
+    ehEspaco c = isSpace c || c == '\65279' || c == '\8203'
 
 -- | Aceita somente inteiros decimais simples (dígitos, com '-' opcional),
 -- dentro de 'limiteNumerico'. Rejeita '+3', '0x10', '1e3', '3.0' e vazio.
@@ -194,48 +192,3 @@ preencheDir largura texto = texto ++ replicate (largura - length texto) ' '
 
 preencheEsq :: Int -> String -> String
 preencheEsq largura texto = replicate (largura - length texto) ' ' ++ texto
-
--- | Relatório completo (puro) da demonstração: as três camadas sobre o
--- campeonato válido, mais o tratamento do texto com erros.
-demonstracao :: String -> String -> String
-demonstracao dadosValidos dadosInvalidos =
-  unlines (either secaoErro secaoCampeonato (lerCampeonato dadosValidos) ++ secaoErros dadosInvalidos)
-
-secaoErro :: Erro -> [String]
-secaoErro erro = ["Erro ao ler o campeonato: " ++ descreverErro erro]
-
-secaoCampeonato :: [Partida] -> [String]
-secaoCampeonato partidas =
-  [ "== Classificação final =="
-  , tabelaFormatada (classificacao partidas)
-  , "== Classificação após a rodada " ++ show rodadaIntermediaria ++ " =="
-  , tabelaFormatada (classificacao (ateRodada rodadaIntermediaria partidas))
-  , "== Estatísticas =="
-  , "Maior goleada: " ++ maybe "nenhuma partida" descreverPartida (maiorGoleada partidas)
-  , "Média de gols por partida: " ++ maybe "sem partidas" duasCasas (mediaGols partidas)
-  , "Aproveitamento:"
-  ]
-    ++ map linhaDeAproveitamento (classificacao partidas)
-    ++ [""]
-  where
-    rodadaIntermediaria = 3
-
-descreverPartida :: Partida -> String
-descreverPartida p =
-  "rodada " ++ show (rodada p) ++ ", " ++ mandante p ++ " " ++ show (golsMandante p)
-    ++ " x " ++ show (golsVisitante p) ++ " " ++ visitante p
-
--- | Número com duas casas decimais.
-duasCasas :: Double -> String
-duasCasas media = showFFloat (Just 2) media ""
-
-linhaDeAproveitamento :: Linha -> String
-linhaDeAproveitamento linha = "  " ++ time linha ++ ": " ++ duasCasas (aproveitamento linha) ++ "%"
-
-secaoErros :: String -> [String]
-secaoErros dados =
-  [ "== Entrada com erros =="
-  , "Primeiro erro (lerCampeonato): " ++ either descreverErro (const "nenhum") (lerCampeonato dados)
-  , "Todos os erros (todosOsErros):"
-  ]
-    ++ map (("  - " ++) . descreverErro) (todosOsErros dados)

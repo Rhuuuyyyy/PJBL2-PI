@@ -2,7 +2,7 @@
 -- conferidos à mão e por um cálculo independente (fora do Haskell).
 module Main (main) where
 
-import Data.List (isInfixOf, nub)
+import Data.List (nub)
 import System.Exit (exitFailure)
 import System.IO (hGetEncoding, hSetEncoding, mkTextEncoding, stdout)
 
@@ -49,6 +49,20 @@ campeonatoGolsPro = [Partida 1 "X" 3 2 "Z", Partida 1 "Y" 1 0 "W"]
 -- | Dois times com campanhas idênticas: só o nome desempata.
 campeonatoSoNome :: [Partida]
 campeonatoSoNome = [Partida 1 "Beta" 1 1 "Alfa"]
+
+-- | Textos de naturezas diferentes para conferir a coerência entre
+-- 'lerCampeonato' e 'todosOsErros'.
+textosVariados :: [String]
+textosVariados =
+  [ "", dadosCampeonato, dadosComErros, textoVariosErros, "lixo", ";;;;", "1;A;1;0;B\n1;A;0;0;C"
+  , "1;A;1;0;B\r\n2;B;x;0;C\r\n", "# só comentário", "1;Paraná;0;0;Operário\n1;Operário;1;1;Londrina" ]
+
+-- | 'lerCampeonato' falha se e somente se 'todosOsErros' não é vazio, e o
+-- erro devolvido é o primeiro da lista.
+coerentes :: String -> Bool
+coerentes texto = case lerCampeonato texto of
+  Left erro -> take 1 (todosOsErros texto) == [erro]
+  Right _   -> null (todosOsErros texto)
 
 -- | Mesmo campeonato com finais de linha do Windows.
 comCRLF :: String -> String
@@ -318,20 +332,25 @@ testesCamada3 =
   , caso "tabelaFormatada com nome curto mantém a coluna do cabeçalho (largura mínima 4)"
       (tabelaFormatada [Linha "A" 1 1 0 0 2 0])
       (unlines ["Pos Time Pts   J   V   E   D  SG", "  1 A      3   1   1   0   0   2"])
-  , caso "demonstração mostra nomes com acento" (all (`isInfixOf` demonstracao dadosCampeonato dadosComErros) ["Paraná", "Operário"]) True
-  , caso "demonstração mostra a tabela final" (textoTabelaFinal `isInfixOf` demonstracao dadosCampeonato dadosComErros) True
-  , caso "demonstração mostra a mensagem de erro com a linha"
-      ("linha 3: gols do mandante \"dois\"" `isInfixOf` demonstracao dadosCampeonato dadosComErros) True
-  , caso "demonstração com dados inválidos não quebra" (null (demonstracao dadosComErros dadosComErros)) False
+  , caso "descreverErro de CamposInvalidos" (descreverErro (CamposInvalidos 1 2))
+      "linha 1: esperados 5 campos separados por ';', encontrados 2"
+  , caso "descreverErro de NumeroInvalido" (descreverErro (NumeroInvalido 1 CampoRodada "x"))
+      "linha 1: rodada \"x\" não é um número inteiro válido (até 1000000)"
+  , caso "descreverErro de NumeroInvalido (gols do mandante)" (descreverErro (NumeroInvalido 3 (CampoGols Mandante) "dois"))
+      "linha 3: gols do mandante \"dois\" não é um número inteiro válido (até 1000000)"
+  , caso "descreverErro de PlacarNegativo" (descreverErro (PlacarNegativo 1 Visitante (-1)))
+      "linha 1: gols do visitante negativo (-1)"
+  , caso "descreverErro de RodadaInvalida" (descreverErro (RodadaInvalida 1 0))
+      "linha 1: rodada 0 inválida (deve ser maior que 0)"
+  , caso "descreverErro de TimeVazio" (descreverErro (TimeVazio 1 Mandante)) "linha 1: nome do mandante está em branco"
   , caso "descreverErro de MesmoTime" (descreverErro (MesmoTime 4 "Londrina")) "linha 4: Londrina não pode jogar contra si mesmo"
   , caso "descreverErro de TimeRepetidoNaRodada"
       (descreverErro (TimeRepetidoNaRodada 2 "Paraná")) "rodada 2: Paraná aparece em mais de uma partida"
-  , caso "todo erro tem descrição não vazia"
-      (all (not . null . descreverErro)
-        [ CamposInvalidos 1 2, NumeroInvalido 1 CampoRodada "x", PlacarNegativo 1 Visitante (-1)
-        , RodadaInvalida 1 0, TimeVazio 1 Mandante, MesmoTime 1 "A", TimeRepetidoNaRodada 1 "A" ])
-      True
+  , caso "lerCampeonato e todosOsErros são coerentes em vários textos"
+      (map coerentes textosVariados) (map (const True) textosVariados)
   , caso "BOM no início da linha é ignorado" (lerPartida 1 ("\65279" ++ "1;A;1;0;B")) (Right (Partida 1 "A" 1 0 "B"))
+  , caso "espaço de largura zero nas pontas do nome é ignorado" (lerPartida 1 "1;\8203A\8203;1;0;B") (Right (Partida 1 "A" 1 0 "B"))
+  , caso "nome só com espaço de largura zero é vazio" (lerPartida 1 "1;\8203;1;0;B") (Left (TimeVazio 1 Mandante))
   , caso "linha só com BOM conta como um campo vazio" (lerPartida 1 "\65279") (Left (CamposInvalidos 1 1))
   , caso "lerCampeonato trata linha só com BOM como linha em branco" (lerCampeonato "\65279\n1;A;1;0;B") (Right [Partida 1 "A" 1 0 "B"])
   ]
