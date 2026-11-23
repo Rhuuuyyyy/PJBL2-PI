@@ -4,7 +4,7 @@ module Main (main) where
 
 import Data.List (isInfixOf, nub)
 import System.Exit (exitFailure)
-import System.IO (hSetEncoding, stdout, utf8)
+import System.IO (hGetEncoding, hSetEncoding, mkTextEncoding, stdout)
 
 import Classificacao
 import Dados
@@ -311,6 +311,9 @@ testesCamada3 =
   , caso "tabelaFormatada com nome longo alinha as colunas"
       (tabelaFormatada [Linha "Sociedade Esportiva" 1 1 0 0 2 0])
       (unlines ["Pos Time                Pts   J   V   E   D  SG", "  1 Sociedade Esportiva   3   1   1   0   0   2"])
+  , caso "tabelaFormatada com nome curto mantém a coluna do cabeçalho (largura mínima 4)"
+      (tabelaFormatada [Linha "A" 1 1 0 0 2 0])
+      (unlines ["Pos Time Pts   J   V   E   D  SG", "  1 A      3   1   1   0   0   2"])
   , caso "demonstração mostra nomes com acento" (all (`isInfixOf` demonstracao dadosCampeonato dadosComErros) ["Paraná", "Operário"]) True
   , caso "demonstração mostra a tabela final" (textoTabelaFinal `isInfixOf` demonstracao dadosCampeonato dadosComErros) True
   , caso "demonstração mostra a mensagem de erro com a linha"
@@ -333,7 +336,8 @@ testesCamada3 =
 
 main :: IO ()
 main = do
-  hSetEncoding stdout utf8
+  atual <- hGetEncoding stdout
+  mapM_ (\e -> mkTextEncoding (show e ++ "//TRANSLIT") >>= hSetEncoding stdout) atual
   let secoes =
         [ ("Camada 1", testesCamada1)
         , ("Camada 2", testesCamada2)
